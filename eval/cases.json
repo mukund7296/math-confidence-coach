@@ -1,0 +1,7 @@
+[
+  {"topic": "dividing fractions", "grade": "Grade 6", "must_contain": ["reciprocal"], "answer_contains": []},
+  {"topic": "solving linear equations", "grade": "Grade 8", "must_contain": ["both sides"], "answer_contains": []},
+  {"topic": "Pythagorean theorem", "grade": "Grade 8", "must_contain": ["hypotenuse", "right"], "answer_contains": []},
+  {"topic": "adding negative numbers", "grade": "Grade 7", "must_contain": [], "answer_contains": []},
+  {"topic": "area of a circle", "grade": "Grade 7", "must_contain": ["radius"], "answer_contains": []}
+]

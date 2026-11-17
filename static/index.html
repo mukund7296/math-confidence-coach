@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Math Confidence Coach</title>
+<style>
+  :root { --bg:#f8fafc; --card:#fff; --ink:#1e293b; --mute:#64748b; --line:#e2e8f0; --accent:#2563eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f172a; --card:#1e293b; --ink:#f1f5f9; --mute:#94a3b8; --line:#334155; --accent:#60a5fa; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 system-ui,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { margin:0 0 4px; font-size:28px; } .sub { color:var(--mute); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; } .row > div { flex:1; min-width:160px; }
+  label { display:block; font-size:14px; color:var(--mute); margin-bottom:4px; }
+  input, select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); font:inherit; }
+  button { margin-top:16px; width:100%; padding:12px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  h2 { font-size:18px; margin:0 0 8px; } ul, ol { margin:0; padding-left:22px; } li { margin-bottom:6px; }
+  .badge { display:inline-block; font-size:13px; padding:2px 10px; border-radius:999px; border:1px solid var(--line); color:var(--mute); margin-bottom:12px; }
+  .err { color:#dc2626; } .note { font-size:13px; color:var(--mute); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Math Confidence Coach</h1>
+  <p class="sub">Refresh the maths behind a topic, then get a lesson ready. Private: no accounts, no tests, no scores.</p>
+
+  <div class="card">
+    <label for="topic">Topic</label>
+    <input id="topic" maxlength="80" placeholder="e.g. dividing fractions, linear equations, Pythagoras" />
+    <div class="row" style="margin-top:12px">
+      <div><label for="grade">Grade</label><select id="grade"></select></div>
+      <div><label for="language">Language</label><select id="language"></select></div>
+    </div>
+    <button id="go">Prepare my lesson card</button>
+  </div>
+
+  <div id="out" aria-live="polite"></div>
+  <p class="note">Topics you type are sent to an AI service to write the card. No names, emails or history are stored.</p>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+for (const g of [5,6,7,8,9,10,11,12]) $("grade").add(new Option(`Grade ${g}`, `Grade ${g}`, false, g === 8));
+for (const l of ["English","German","Swedish","Spanish","French"]) $("language").add(new Option(l, l));
+
+// Safe rendering: everything from the model goes through textContent, never innerHTML.
+function el(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  Object.assign(e, props);
+  for (const k of kids) e.append(k);
+  return e;
+}
+function section(title, ...content) {
+  const c = el("div", { className: "card" }, el("h2", { textContent: title }));
+  content.forEach((x) => c.append(x));
+  return c;
+}
+const list = (items, ordered) => el(ordered ? "ol" : "ul", {}, ...items.map((t) => el("li", { textContent: t })));
+const para = (t) => el("p", { textContent: t, style: "margin:0" });
+
+function render(r) {
+  const c = r.card, out = $("out");
+  out.replaceChildren();
+  const badge = r.source === "vetted_lesson"
+    ? `Based on a reviewed lesson: ${r.source_title}` : "AI-written draft. Please check the maths before teaching it.";
+  out.append(el("span", { className: "badge", textContent: badge }));
+  out.append(section("The idea, in plain words", para(c.core_idea)));
+  out.append(section("Why it works", para(c.why_it_works)));
+  out.append(section("Worked example",
+    para(c.worked_example.problem), list(c.worked_example.steps, true),
+    el("p", { textContent: "Answer: " + c.worked_example.answer, style: "font-weight:600;margin:8px 0 0" })));
+  out.append(section("What students often get wrong", el("ul", {}, ...c.misconceptions.map((m) =>
+    el("li", {}, el("strong", { textContent: m.mistake }),
+      el("div", { textContent: "Why: " + m.why_students_think_it }),
+      el("div", { textContent: "In class: " + m.how_to_respond }))))));
+  out.append(section("Lesson ideas", list(c.lesson_ideas)));
+  out.append(section("Differentiation", list(["Simpler: " + c.differentiation.simpler, "Extension: " + c.differentiation.extension])));
+  out.append(section("A short classroom activity", para(c.activity)));
+}
+
+$("go").onclick = async () => {
+  const topic = $("topic").value.trim();
+  if (topic.length < 2) { $("topic").focus(); return; }
+  $("go").disabled = true; $("out").replaceChildren(el("p", { className: "note", textContent: "Preparing your card…" }));
+  try {
+    const res = await fetch("/coach", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic, grade: $("grade").value, language: $("language").value }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Please check your input.");
+    render(data);
+  } catch (e) {
+    $("out").replaceChildren(el("p", { className: "err", textContent: e.message }));
+  } finally { $("go").disabled = false; }
+};
+$("topic").addEventListener("keydown", (e) => { if (e.key === "Enter") $("go").click(); });
+</script>
+</body>
+</html>

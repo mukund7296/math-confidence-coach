@@ -1,105 +1,65 @@
-# Math Confidence Coach
+# Math Confidence Coach (prototype, part 1)
 
-A focused prototype that helps math teachers quickly refresh their knowledge and prepare lessons.
+A private, no-chat tool. A teacher types a topic and gets one **Lesson Card**: the idea in plain words,
+why it works, a worked example, common student mistakes (with how to respond), lesson ideas,
+differentiation and a short activity. No accounts, no tests, no scores, no chat.
 
-## How to Run
+## Run it
+```bash
+python -m venv venv && source venv/bin/activate     # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env        # then fill in LLM_API_KEY (and check LLM_MODEL is currently available)
+uvicorn app.main:app --reload                       # open http://localhost:8000
+pytest -q                                           # 6 tests, no API key needed (LLM is faked)
+python -m eval.run_eval                             # quality checks against the real model
+```
+Any OpenAI-compatible provider works (Gemini, Groq, OpenRouter, or local Ollama): change 3 env vars, no code.
 
-1. Unzip the repository and open a terminal in the project folder.
+## Product decisions
+- **Need served:** "I must teach X tomorrow and I don't fully trust my own understanding." The card starts with the
+  *teacher's* understanding (idea + why it works), then moves to teaching. Teachers who avoid chatbots and tests
+  get one read-and-go page. No quiz, no score, nothing is judged.
+- **Honesty about trust:** each card says whether it is based on a reviewed lesson (`/lessons`, 3 short originals
+  I wrote) or is an AI-written draft the teacher should check. Math teachers who already doubt themselves must
+  not be given confident wrong answers.
+- **Languages:** 5 selectable, because the target is many countries.
 
-2. Create a virtual environment and install dependencies:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate        # Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+## Architecture (small on purpose)
+`static/index.html` -> `POST /coach` -> cache lookup -> (miss) retrieval of a vetted lesson -> LLM -> schema
+validation (+1 retry) -> cache -> response.
+- `app/llm.py` one provider-agnostic client. `app/retrieval.py` keyword lookup; swap for embeddings when the
+  corpus grows past a few dozen lessons. `app/cache.py` SQLite now, Redis/Postgres for several servers.
+- The API returns structured JSON, so any other client (mobile, LMS plugin) can reuse it.
 
-3. Copy `.env.example` to `.env` and add your free Gemini API key:
-   ```bash
-   cp .env.example .env
-   ```
-   Then edit `.env` and replace `your_gemini_api_key_here` with your real key  
-   (Get a free key at: https://aistudio.google.com/app/apikey)
+## How I know answers are good
+1. Output must pass a strict schema, otherwise retry once, otherwise a safe error (tested).
+2. Grounding: if a reviewed lesson matches, the model must build on it.
+3. `eval/run_eval.py`: structure, required concepts, banned test/score language, and it prints every worked example
+   for a human to check. **Honest limit:** I have not had a maths teacher review outputs. Before launch: teacher
+   review of the top ~200 topics, a "report a mistake" button, and cache invalidation of reported cards.
+4. Unit tests cover caching, rate limit, input validation, bad model output.
 
-4. Start the server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+## Cost per teacher per month
+Per generated card: about 1.3k input + 1k output tokens. Cost = `calls x (in x price_in + out x price_out)`.
+Example assumption (check the provider's current price list): $0.30 / 1M input, $2.50 / 1M output
+=> about $0.003 per card. A teacher making 10 cards/month without cache: **about $0.03**.
+Because the cache key is topic+grade+language and has no user data, 20-50k teachers hit mostly the same
+topics; at an 80% hit rate it is **about $0.006 per teacher/month**, so 50,000 teachers cost roughly $300/month.
+Further: pre-generate the ~500 most common topics in a batch (cheaper), use a smaller model for easy topics,
+shorter output. Free tiers are only for development (rate-limited, see data section).
 
-5. Open http://localhost:8000 in your browser.
+## Data: what we handle and where it goes
+- The teacher types a **topic**, picks grade and language. Only that goes to the AI provider to write the card.
+- We store the topic+grade+language and the generated card in a cache. **No names, emails, accounts or
+  history.** IP addresses are kept only in server memory for one hour to limit abuse, never written to disk.
+- Logs record failure reasons only, not topics.
+- Free tiers of some providers may use prompts to improve their products. For production use a paid tier with
+  no-training terms or an EU-hosted/local model; with GDPR in mind, sign a data processing agreement.
+  Topics are not personal data, but teachers may type something personal, hence the notice under the form.
 
-## Product Decisions
+## Skipped and why
+Accounts, history, chat, quizzes (the brief rejects them); vector DB (3 lessons); streaming; admin tool for
+reviewing cards; real auth/CDN/monitoring. A "report a mistake" button is the first thing I would add.
 
-**Problem I focused on**  
-Many math teachers lack confidence in the topics they teach. They need a fast way to refresh their understanding and get practical lesson ideas — without feeling tested or judged.
-
-**What the coach does**  
-The teacher enters a topic + grade level and instantly receives a structured “Lesson Ready Card” containing:
-- Core idea (knowledge refresh)
-- Common student misconceptions
-- Practical lesson ideas
-- Differentiation (simpler + extension)
-- One quick classroom activity
-
-**Why this form?**
-- Teachers in the brief dislike chatbots → I avoided a conversational interface completely.
-- They do not want tests or scores → The coach never evaluates the teacher.
-- They learn alone and need something fast → One-click structured output is more useful than a long chat.
-
-**Trade-offs**
-- I chose depth on a clear interaction over building many features.
-- Stateless design keeps cost and complexity very low.
-- Frontend is intentionally simple but clean and professional.
-
-## What I Skipped and Why
-
-- User accounts / login (not needed for the core value)
-- Chat history (conflicts with “dislike chatbots”)
-- Tests or quizzes (explicitly unwanted)
-- Complex RAG / vector database (unnecessary for a strong 2-hour prototype)
-- Multi-agent system (would add complexity without clear benefit at this stage)
-
-## Time Spent
-Approximately 1 hour 50 minutes.
-
-## How I Ensure Good Answers
-
-1. Strong, opinionated system prompt that forces a consistent useful structure.
-2. Low temperature (0.4) for more reliable output.
-3. Clear separation of concerns in the prompt (Core Idea, Misconceptions, Lesson Ideas, etc.).
-4. Manual testing on several topics (fractions, linear equations, Pythagoras, quadratic equations).
-
-## Cost per Teacher per Month
-
-Using Gemini 1.5 Flash:
-
-- Average request ≈ 900–1200 tokens
-- Realistic usage: 8–12 requests per teacher per month
-- Estimated cost: **$0.015 – $0.04 per teacher per month**
-
-Ways to lower cost further:
-- Cache popular topics
-- Move frequent topics to static content + light LLM polishing
-- Use Gemini Flash-8B for simpler requests
-- Add a lightweight RAG layer later so the model generates less text
-
-## Data Handling (Plain Language)
-
-The coach only receives the math topic and grade level that the teacher types.  
-This information is sent to Google’s Gemini API to generate the response.  
-
-We do not store:
-- Teacher names
-- Email addresses
-- Conversation history
-- Any personal data
-
-The current version is completely stateless.
-
-## Architecture Notes
-
-- Simple and extensible FastAPI backend
-- Easy to add caching, RAG, or more grade-specific content later
-- Frontend can be replaced by any client without changing the API
-
----
-Built as a focused prototype for the Akelius AI Engineer assignment.
+## Time spent
+FILL IN HONESTLY (e.g. ~2h). Commits show the order of work.
