@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Math Confidence Coach</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div class="max-w-3xl mx-auto px-4 py-10">
+    <!-- Header -->
+    <div class="text-center mb-10">
+      <h1 class="text-3xl font-bold text-slate-800">Math Confidence Coach</h1>
+      <p class="text-slate-600 mt-2">Quick knowledge refresh + ready-to-use lesson ideas</p>
+    </div>
+
+    <!-- Input Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Math Topic</label>
+          <input
+            id="topic"
+            type="text"
+            placeholder="e.g. Quadratic equations, Fractions, Pythagoras..."
+            class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Grade Level</label>
+          <select
+            id="grade"
+            class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+          >
+            <option>Grade 5</option>
+            <option>Grade 6</option>
+            <option>Grade 7</option>
+            <option selected>Grade 8</option>
+            <option>Grade 9</option>
+            <option>Grade 10</option>
+            <option>Grade 11</option>
+            <option>Grade 12</option>
+          </select>
+        </div>
+
+        <button
+          onclick="getCoaching()"
+          id="btn"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition"
+        >
+          Get Lesson Ready Card
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden text-center py-8 text-slate-500">
+      Creating your lesson card...
+    </div>
+
+    <!-- Result -->
+    <div id="result" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6 prose prose-slate max-w-none"></div>
+  </div>
+
+  <script>
+    async function getCoaching() {
+      const topic = document.getElementById("topic").value.trim();
+      const grade = document.getElementById("grade").value;
+      const btn = document.getElementById("btn");
+      const loading = document.getElementById("loading");
+      const result = document.getElementById("result");
+
+      if (!topic) {
+        alert("Please enter a math topic");
+        return;
+      }
+
+      btn.disabled = true;
+      loading.classList.remove("hidden");
+      result.classList.add("hidden");
+
+      try {
+        const res = await fetch("/coach", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic, grade }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.detail || "Something went wrong");
+
+        // Simple markdown to HTML (basic)
+        let html = data.result
+          .replace(/^### (.*$)/gim, "<h3 class='text-xl font-semibold mt-6 mb-2 text-slate-800'>$1</h3>")
+          .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+          .replace(/^- (.*$)/gim, "<li class='ml-5 list-disc'>$1</li>")
+          .replace(/^\d+\. (.*$)/gim, "<li class='ml-5 list-decimal'>$1</li>")
+          .replace(/\n/g, "<br>");
+
+        result.innerHTML = html;
+        result.classList.remove("hidden");
+      } catch (err) {
+        result.innerHTML = `<p class="text-red-600">Error: ${err.message}</p>`;
+        result.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        loading.classList.add("hidden");
+      }
+    }
+  </script>
+</body>
+</html>
