@@ -366,4 +366,8 @@ For example, you can request:
 
 The same application architecture can work with different LLM providers, provided they support the API format and features required by our integration.
 
+<<<<<<< HEAD
 **Math Confidence Coach — helping teachers refresh, understand and prepare mathematics lessons with AI.**
+=======
+**Math Confidence Coach — helping teachers refresh, understand and prepare mathematics lessons with AI.**
+>>>>>>> deea81d4040e977cc2841461a3bced3fb93d8e54
